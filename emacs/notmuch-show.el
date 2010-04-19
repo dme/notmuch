@@ -273,6 +273,45 @@ current buffer, if possible."
 	      t)
 	  nil)))))
 
+(defvar notmuch-show-multipart/alternative-discouraged
+  '(
+    ;; Avoid HTML parts.
+    "text/html"
+    ;; multipart/related usually contain a text/html part and some associated graphics.
+    "multipart/related"
+    ))
+
+(defun notmuch-show-multipart/*-to-list (part)
+  (mapcar '(lambda (inner-part) (plist-get inner-part :content-type)) (plist-get part :content)))
+
+(defun notmuch-show-multipart/alternative-choose (types)
+  ;; Based on `mm-preferred-alternative-precedence'.
+  (let ((seq types))
+    (dolist (pref (reverse notmuch-show-multipart/alternative-discouraged))
+      (dolist (elem (copy-sequence seq))
+	(when (string-match pref elem)
+	  (setq seq (nconc (delete elem seq) (list elem))))))
+    seq))
+
+(defun notmuch-show-insert-part-multipart/alternative (msg part content-type nth depth declared-type)
+  (notmuch-show-insert-part-header nth declared-type content-type (plist-get part :filename))
+  (let ((chosen-type (car (notmuch-show-multipart/alternative-choose (notmuch-show-multipart/*-to-list part)))))
+    (mapc '(lambda (inner-part)
+	     (let ((inner-type (plist-get inner-part :content-type)))
+	       (if (string= chosen-type inner-type)
+		   (notmuch-show-insert-bodypart msg inner-part depth)
+		 (notmuch-show-insert-part-header nth inner-type inner-type (concat "Not shown" (plist-get inner-part :filename))))))
+	  (plist-get part :content))))
+
+(defun notmuch-show-insert-part-multipart/mixed (msg part content-type nth depth declared-type)
+  ;; XXX dme: Typically used for `text/html' plus associated
+  ;; images. Should really push those images into a directory and let
+  ;; the HTML parser see them. For now, just inline each part.
+  (notmuch-show-insert-part-header nth declared-type content-type (plist-get part :filename))
+  (mapc '(lambda (inner-part)
+	   (notmuch-show-insert-bodypart msg inner-part depth))
+	(plist-get part :content)))
+
 (defun notmuch-show-insert-part-text/plain (msg part content-type nth depth declared-type)
   (let ((start (point)))
     ;; If this text/plain part is not the first part in the message,
@@ -306,7 +345,7 @@ current buffer, if possible."
   ;; This handler _must_ succeed - it is the handler of last resort.
   (notmuch-show-insert-part-header nth content-type declared-type (plist-get part :filename))
   (let ((content (notmuch-show-get-bodypart-content msg part nth)))
-    (if content
+    (if (stringp content)
 	(notmuch-show-mm-display-part-inline msg part content-type content)))
   t)
 

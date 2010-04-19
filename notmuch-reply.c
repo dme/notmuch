@@ -72,7 +72,7 @@ show_reply_headers (GMimeMessage *message)
 }
 
 static void
-reply_part (GMimeObject *part, int *part_count)
+reply_part (GMimeObject *part, int *part_count, notmuch_bool_t first)
 {
     GMimeContentDisposition *disposition;
     GMimeContentType *content_type;

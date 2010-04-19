@@ -127,7 +127,15 @@ query_string_from_args (void *ctx, int argc, char *argv[]);
 
 notmuch_status_t
 show_message_body (const char *filename,
-		   void (*show_part) (GMimeObject *part, int *part_count));
+		   void (*show_part) (GMimeObject *part, int *part_count, notmuch_bool_t first));
+
+void
+show_message_part (GMimeObject *part, int *part_count,
+		   void (*show_part) (GMimeObject *part, int *part_count, notmuch_bool_t first),
+		   notmuch_bool_t first);
+
+notmuch_status_t
+show_one_part (const char *filename, int part);
 
 notmuch_status_t
 show_one_part (const char *filename, int part);

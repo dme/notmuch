@@ -22,46 +22,18 @@
 
 #include "notmuch-client.h"
 
-static void
+void
 show_message_part (GMimeObject *part, int *part_count,
-		   void (*show_part) (GMimeObject *part, int *part_count))
+		   void (*show_part) (GMimeObject *part, int *part_count, notmuch_bool_t first), notmuch_bool_t first)
 {
-    if (GMIME_IS_MULTIPART (part)) {
-	GMimeMultipart *multipart = GMIME_MULTIPART (part);
-	int i;
-
-	for (i = 0; i < g_mime_multipart_get_count (multipart); i++) {
-	    show_message_part (g_mime_multipart_get_part (multipart, i),
-			       part_count, show_part);
-	}
-	return;
-    }
-
-    if (GMIME_IS_MESSAGE_PART (part)) {
-	GMimeMessage *mime_message;
-
-	mime_message = g_mime_message_part_get_message (GMIME_MESSAGE_PART (part));
-
-	show_message_part (g_mime_message_get_mime_part (mime_message),
-			   part_count, show_part);
-
-	return;
-    }
-
-    if (! (GMIME_IS_PART (part))) {
-	fprintf (stderr, "Warning: Not displaying unknown mime part: %s.\n",
-		 g_type_name (G_OBJECT_TYPE (part)));
-	return;
-    }
-
     *part_count = *part_count + 1;
 
-    (*show_part) (part, part_count);
+    (*show_part) (part, part_count, FALSE);
 }
 
 notmuch_status_t
 show_message_body (const char *filename,
-		   void (*show_part) (GMimeObject *part, int *part_count))
+		   void (*show_part) (GMimeObject *part, int *part_count, notmuch_bool_t first))
 {
     GMimeStream *stream = NULL;
     GMimeParser *parser = NULL;
@@ -85,7 +57,7 @@ show_message_body (const char *filename,
     mime_message = g_mime_parser_construct_message (parser);
 
     show_message_part (g_mime_message_get_mime_part (mime_message),
-		       &part_count, show_part);
+		       &part_count, show_part, TRUE);
 
   DONE:
     if (mime_message)
@@ -109,8 +81,18 @@ show_one_part_output (GMimeObject *part)
     GMimeStream *stream_filter = NULL;
     GMimeDataWrapper *wrapper;
     GMimeStream *stream_stdout = g_mime_stream_file_new (stdout);
+    const char *charset;
+
+    charset = g_mime_object_get_content_type_parameter (part, "charset");
 
     stream_filter = g_mime_stream_filter_new(stream_stdout);
+    g_mime_stream_filter_add(GMIME_STREAM_FILTER(stream_filter),
+			     g_mime_filter_crlf_new(FALSE, FALSE));
+    if (charset) {
+	    g_mime_stream_filter_add(GMIME_STREAM_FILTER(stream_filter),
+				     g_mime_filter_charset_new(charset, "UTF-8"));
+    }
+
     wrapper = g_mime_part_get_content_object (GMIME_PART (part));
     if (wrapper && stream_filter)
 	g_mime_data_wrapper_write_to_stream (wrapper, stream_filter);
@@ -121,6 +103,8 @@ show_one_part_output (GMimeObject *part)
 static void
 show_one_part_worker (GMimeObject *part, int *part_count, int desired_part)
 {
+    *part_count = *part_count + 1;
+
     if (GMIME_IS_MULTIPART (part)) {
 	GMimeMultipart *multipart = GMIME_MULTIPART (part);
 	int i;
@@ -142,6 +126,7 @@ show_one_part_worker (GMimeObject *part, int *part_count, int desired_part)
 
 	return;
     }
+
 
     if (! (GMIME_IS_PART (part)))
 	return;
