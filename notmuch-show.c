@@ -32,7 +32,8 @@ typedef struct show_format {
     const char *header_end;
     const char *body_start;
     void (*part) (GMimeObject *part,
-		  int *part_count);
+		  int *part_count,
+		  gboolean first);
     const char *body_end;
     const char *message_end;
     const char *message_set_sep;
@@ -48,7 +49,8 @@ format_headers_text (const void *ctx,
 		     notmuch_message_t *message);
 static void
 format_part_text (GMimeObject *part,
-		  int *part_count);
+		  int *part_count,
+		  gboolean first);
 static const show_format_t format_text = {
     "",
 	"\fmessage{ ", format_message_text,
@@ -67,14 +69,15 @@ format_headers_json (const void *ctx,
 		     notmuch_message_t *message);
 static void
 format_part_json (GMimeObject *part,
-		  int *part_count);
+		  int *part_count,
+		  gboolean first);
 static const show_format_t format_json = {
     "[",
 	"{", format_message_json,
-	    ", \"headers\": {", format_headers_json, "}",
-	    ", \"body\": [", format_part_json, "]",
-	"}", ", ",
-    "]"
+	    ", \"headers\": {", format_headers_json, "}\n",
+	    ", \"body\": [", format_part_json, "]\n",
+	"}\n", ", ",
+    "]\n"
 };
 
 static void
@@ -364,7 +367,7 @@ show_part_content (GMimeObject *part, GMimeStream *stream_out)
 }
 
 static void
-format_part_text (GMimeObject *part, int *part_count)
+format_part_text (GMimeObject *part, int *part_count, gboolean first)
 {
     GMimeContentDisposition *disposition;
     GMimeContentType *content_type;
@@ -420,7 +423,7 @@ format_part_text (GMimeObject *part, int *part_count)
 }
 
 static void
-format_part_json (GMimeObject *part, int *part_count)
+format_part_json (GMimeObject *part, int *part_count, gboolean first)
 {
     GMimeContentType *content_type;
     GMimeContentDisposition *disposition;
@@ -430,12 +433,69 @@ format_part_json (GMimeObject *part, int *part_count)
 
     content_type = g_mime_object_get_content_type (GMIME_OBJECT (part));
 
-    if (*part_count > 1)
-	fputs (", ", stdout);
+    if (!first)
+	fputs (",\n", stdout);
 
     printf ("{\"id\": %d, \"content-type\": %s",
 	    *part_count,
 	    json_quote_str (ctx, g_mime_content_type_to_string (content_type)));
+
+    if (GMIME_IS_MULTIPART (part)) {
+	GMimeMultipart *multipart = GMIME_MULTIPART (part);
+	int i;
+
+	printf (", \"content\": [\n");
+
+	for (i = 0; i < g_mime_multipart_get_count (multipart); i++) {
+		*part_count += 1;
+
+		format_part_json (g_mime_multipart_get_part (multipart, i),
+				  part_count, i == 0);
+	}
+
+	printf ("]}\n");
+
+	return;
+    }
+
+    if (GMIME_IS_MESSAGE_PART (part)) {
+	GMimeMessage *mime_message;
+	void *ctx_quote = talloc_new (ctx);
+	const char *value;
+	InternetAddressList *addresses;
+
+	*part_count += 1;
+	mime_message = g_mime_message_part_get_message (GMIME_MESSAGE_PART (part));
+
+	/* Insert the headers of the enclosed message. */
+	printf (", \"headers\": {");
+
+	value = g_mime_message_get_sender(mime_message);
+	printf ("\"From\": %s,", json_quote_str (ctx_quote, value));
+	value = g_mime_message_get_subject(mime_message);
+	printf ("\"Subject\": %s,", json_quote_str (ctx_quote, value));
+	value = g_mime_message_get_subject(mime_message);
+	printf ("\"Subject\": %s,", json_quote_str (ctx_quote, value));
+	addresses = g_mime_message_get_recipients(mime_message, GMIME_RECIPIENT_TYPE_TO);
+	printf ("\"To\": %s,", json_quote_str (ctx_quote, internet_address_list_to_string (addresses, FALSE)));
+	addresses = g_mime_message_get_recipients(mime_message, GMIME_RECIPIENT_TYPE_CC);
+	printf ("\"Cc\": %s,", json_quote_str (ctx_quote, internet_address_list_to_string (addresses, FALSE)));
+	value = g_mime_message_get_date_as_string(mime_message);
+	printf ("\"Date\": %s", json_quote_str (ctx_quote, value));
+
+	talloc_free (ctx_quote);
+
+	printf ("}\n");
+
+	printf (", \"content\": \n");
+
+	format_part_json (g_mime_message_get_mime_part (mime_message),
+			  part_count, TRUE);
+
+	printf ("}\n");
+
+	return;
+    }
 
     disposition = g_mime_object_get_content_disposition (part);
     if (disposition &&
