@@ -524,8 +524,6 @@ format_part_json (GMimeObject *part, int *part_count, gboolean first)
 	printf ("\"From\": %s,", json_quote_str (ctx_quote, value));
 	value = g_mime_message_get_subject(mime_message);
 	printf ("\"Subject\": %s,", json_quote_str (ctx_quote, value));
-	value = g_mime_message_get_subject(mime_message);
-	printf ("\"Subject\": %s,", json_quote_str (ctx_quote, value));
 	addresses = g_mime_message_get_recipients(mime_message, GMIME_RECIPIENT_TYPE_TO);
 	printf ("\"To\": %s,", json_quote_str (ctx_quote, internet_address_list_to_string (addresses, FALSE)));
 	addresses = g_mime_message_get_recipients(mime_message, GMIME_RECIPIENT_TYPE_CC);
