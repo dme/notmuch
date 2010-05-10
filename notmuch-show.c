@@ -372,6 +372,56 @@ format_part_text (GMimeObject *part, int *part_count, gboolean first)
     GMimeContentDisposition *disposition;
     GMimeContentType *content_type;
 
+    /* Avoid compiler complaints about unused arguments. */
+    (void) first;
+
+    if (GMIME_IS_MULTIPART (part)) {
+	GMimeMultipart *multipart = GMIME_MULTIPART (part);
+	int i;
+
+	for (i = 0; i < g_mime_multipart_get_count (multipart); i++) {
+		*part_count += 1;
+
+		format_part_text (g_mime_multipart_get_part (multipart, i),
+				  part_count, i == 0);
+	}
+
+	return;
+    }
+
+    if (GMIME_IS_MESSAGE_PART (part)) {
+	GMimeMessage *mime_message;
+	void *ctx_quote = talloc_new (NULL);
+	const char *value;
+	InternetAddressList *addresses;
+
+	*part_count += 1;
+	mime_message = g_mime_message_part_get_message (GMIME_MESSAGE_PART (part));
+
+	/* Insert the headers of the enclosed message. */
+	fputs (format_text.header_start, stdout);
+
+	value = g_mime_message_get_sender(mime_message);
+	printf ("From: %s\n", json_quote_str (ctx_quote, value));
+	value = g_mime_message_get_subject(mime_message);
+	printf ("Subject: %s\n", json_quote_str (ctx_quote, value));
+	addresses = g_mime_message_get_recipients(mime_message, GMIME_RECIPIENT_TYPE_TO);
+	printf ("To: %s\n", json_quote_str (ctx_quote, internet_address_list_to_string (addresses, FALSE)));
+	addresses = g_mime_message_get_recipients(mime_message, GMIME_RECIPIENT_TYPE_CC);
+	printf ("Cc: %s\n", json_quote_str (ctx_quote, internet_address_list_to_string (addresses, FALSE)));
+	value = g_mime_message_get_date_as_string(mime_message);
+	printf ("Date: %s\n", json_quote_str (ctx_quote, value));
+
+	fputs (format_text.header_end, stdout);
+
+	talloc_free (ctx_quote);
+
+	format_part_text (g_mime_message_get_mime_part (mime_message),
+			  part_count, TRUE);
+
+	return;
+    }
+
     disposition = g_mime_object_get_content_disposition (part);
     if (disposition &&
 	strcmp (disposition->disposition, GMIME_DISPOSITION_ATTACHMENT) == 0)
