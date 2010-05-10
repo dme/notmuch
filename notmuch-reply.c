@@ -72,12 +72,15 @@ show_reply_headers (GMimeMessage *message)
 }
 
 static void
-reply_part (GMimeObject *part, int *part_count)
+reply_part (GMimeObject *part, int *part_count, gboolean first)
 {
     GMimeContentDisposition *disposition;
     GMimeContentType *content_type;
 
+    /* Avoid compiler complaints about unused arguments. */
     (void) part_count;
+    (void) first;
+
     disposition = g_mime_object_get_content_disposition (part);
     if (disposition &&
 	strcmp (disposition->disposition, GMIME_DISPOSITION_ATTACHMENT) == 0)
