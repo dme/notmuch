@@ -81,6 +81,46 @@ reply_part (GMimeObject *part, int *part_count, gboolean first)
     (void) part_count;
     (void) first;
 
+    if (GMIME_IS_MULTIPART (part)) {
+	GMimeMultipart *multipart = GMIME_MULTIPART (part);
+	int i;
+
+	for (i = 0; i < g_mime_multipart_get_count (multipart); i++) {
+		*part_count += 1;
+
+		reply_part (g_mime_multipart_get_part (multipart, i),
+			    part_count, i == 0);
+	}
+
+	return;
+    }
+
+    if (GMIME_IS_MESSAGE_PART (part)) {
+	GMimeMessage *mime_message;
+	const char *value;
+	InternetAddressList *addresses;
+
+	*part_count += 1;
+	mime_message = g_mime_message_part_get_message (GMIME_MESSAGE_PART (part));
+
+	/* Insert the headers of the enclosed message. */
+	value = g_mime_message_get_sender(mime_message);
+	printf ("From: %s\n", value);
+	value = g_mime_message_get_subject(mime_message);
+	printf ("Subject: %s\n", value);
+	addresses = g_mime_message_get_recipients(mime_message, GMIME_RECIPIENT_TYPE_TO);
+	printf ("To: %s\n", internet_address_list_to_string (addresses, FALSE));
+	addresses = g_mime_message_get_recipients(mime_message, GMIME_RECIPIENT_TYPE_CC);
+	printf ("Cc: %s\n", internet_address_list_to_string (addresses, FALSE));
+	value = g_mime_message_get_date_as_string(mime_message);
+	printf ("Date: %s\n", value);
+
+	reply_part (g_mime_message_get_mime_part (mime_message),
+		    part_count, TRUE);
+
+	return;
+    }
+
     disposition = g_mime_object_get_content_disposition (part);
     if (disposition &&
 	strcmp (disposition->disposition, GMIME_DISPOSITION_ATTACHMENT) == 0)
