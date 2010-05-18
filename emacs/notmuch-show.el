@@ -59,6 +59,11 @@ any given message."
   :group 'notmuch
   :type 'boolean)
 
+(defcustom notmuch-show-always-show-subject t
+  "Should a collapsed message show the `Subject:' line?"
+  :group 'notmuch
+  :type 'boolean)
+
 (defvar notmuch-show-markup-headers-hook '(notmuch-show-colour-headers)
   "A list of functions called to decorate the headers listed in
 `notmuch-message-headers'.")
@@ -601,7 +606,8 @@ current buffer, if possible."
     (insert "\n")
     (save-excursion
       (goto-char content-start)
-      (forward-line 1)
+      (when notmuch-show-always-show-subject
+	(forward-line 1))
       (setq headers-start (point-marker)))
     (setq headers-end (point-marker))
 
