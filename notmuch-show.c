@@ -394,7 +394,6 @@ format_part_text (GMimeObject *part, int *part_count, gboolean first)
 	const char *value;
 	InternetAddressList *addresses;
 
-	*part_count += 1;
 	mime_message = g_mime_message_part_get_message (GMIME_MESSAGE_PART (part));
 
 	/* Insert the headers of the enclosed message. */
@@ -479,6 +478,8 @@ format_part_json (GMimeObject *part, int *part_count, gboolean first)
     GByteArray *part_content;
     const char *cid;
 
+    *part_count += 1;
+
     content_type = g_mime_object_get_content_type (GMIME_OBJECT (part));
 
     if (!first)
@@ -496,6 +497,7 @@ format_part_json (GMimeObject *part, int *part_count, gboolean first)
     if (GMIME_IS_MULTIPART (part)) {
 	GMimeMultipart *multipart = GMIME_MULTIPART (part);
 	int i;
+
 
 	printf (", \"content\": [\n");
 
