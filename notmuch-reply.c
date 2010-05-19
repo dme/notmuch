@@ -72,7 +72,7 @@ show_reply_headers (GMimeMessage *message)
 }
 
 static void
-reply_part (GMimeObject *part, int *part_count, gboolean first)
+reply_part (GMimeObject *part, int *part_count, gboolean first, notmuch_show_params_t *params)
 {
     GMimeContentDisposition *disposition;
     GMimeContentType *content_type;
@@ -89,7 +89,7 @@ reply_part (GMimeObject *part, int *part_count, gboolean first)
 		*part_count += 1;
 
 		reply_part (g_mime_multipart_get_part (multipart, i),
-			    part_count, i == 0);
+			    part_count, i == 0, params);
 	}
 
 	return;
@@ -116,7 +116,7 @@ reply_part (GMimeObject *part, int *part_count, gboolean first)
 	printf ("Date: %s\n", value);
 
 	reply_part (g_mime_message_get_mime_part (mime_message),
-		    part_count, TRUE);
+		    part_count, TRUE, params);
 
 	return;
     }
@@ -490,6 +490,7 @@ notmuch_reply_format_default(void *ctx, notmuch_config_t *config, notmuch_query_
     notmuch_message_t *message;
     const char *subject, *from_addr = NULL;
     const char *in_reply_to, *orig_references, *references;
+    notmuch_show_params_t params;
 
     for (messages = notmuch_query_search_messages (query);
 	 notmuch_messages_valid (messages);
@@ -548,7 +549,7 @@ notmuch_reply_format_default(void *ctx, notmuch_config_t *config, notmuch_query_
 		notmuch_message_get_header (message, "date"),
 		notmuch_message_get_header (message, "from"));
 
-	show_message_body (notmuch_message_get_filename (message), reply_part);
+	show_message_body (notmuch_message_get_filename (message), reply_part, &params);
 
 	notmuch_message_destroy (message);
     }

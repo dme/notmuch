@@ -33,7 +33,8 @@ typedef struct show_format {
     const char *body_start;
     void (*part) (GMimeObject *part,
 		  int *part_count,
-		  gboolean first);
+		  gboolean first,
+		  notmuch_show_params_t *params);
     const char *body_end;
     const char *message_end;
     const char *message_set_sep;
@@ -50,7 +51,8 @@ format_headers_text (const void *ctx,
 static void
 format_part_text (GMimeObject *part,
 		  int *part_count,
-		  gboolean first);
+		  gboolean first,
+		  notmuch_show_params_t *params);
 static const show_format_t format_text = {
     "",
 	"\fmessage{ ", format_message_text,
@@ -70,7 +72,8 @@ format_headers_json (const void *ctx,
 static void
 format_part_json (GMimeObject *part,
 		  int *part_count,
-		  gboolean first);
+		  gboolean first,
+		  notmuch_show_params_t *params);
 static const show_format_t format_json = {
     "[",
 	"{", format_message_json,
@@ -91,6 +94,27 @@ static const show_format_t format_mbox = {
             "", NULL, "",
             "", NULL, "",
         "", "",
+    ""
+}
+
+static void
+format_message_part (const void *ctx,
+		     notmuch_message_t *message,
+		     unused (int indent));
+static void
+format_headers_part (const void *ctx,
+		     notmuch_message_t *message);
+static void
+format_part_part (GMimeObject *part,
+		  int *part_count,
+		  gboolean first,
+		  notmuch_show_params_t *params);
+static const show_format_t format_part = {
+    "",
+	"", format_message_part,
+	    "", format_headers_part, "",
+	    "", format_part_part, "",
+	"", "",
     ""
 };
 
@@ -287,6 +311,13 @@ format_message_mbox (const void *ctx,
 }
 
 static void
+format_message_part (unused (const void *ctx),
+		     unused (notmuch_message_t *message),
+		     unused (int indent))
+{
+}
+
+static void
 format_headers_text (const void *ctx, notmuch_message_t *message)
 {
     const char *headers[] = {
@@ -335,6 +366,12 @@ format_headers_json (const void *ctx, notmuch_message_t *message)
 }
 
 static void
+format_headers_part (unused (const void *ctx),
+		     unused (notmuch_message_t *message))
+{
+}
+
+static void
 show_part_content (GMimeObject *part, GMimeStream *stream_out)
 {
     GMimeStream *stream_filter = NULL;
@@ -367,7 +404,10 @@ show_part_content (GMimeObject *part, GMimeStream *stream_out)
 }
 
 static void
-format_part_text (GMimeObject *part, int *part_count, gboolean first)
+format_part_text (GMimeObject *part,
+		  int *part_count,
+		  gboolean first,
+		  unused (notmuch_show_params_t *params))
 {
     GMimeContentDisposition *disposition;
     GMimeContentType *content_type;
@@ -383,7 +423,7 @@ format_part_text (GMimeObject *part, int *part_count, gboolean first)
 		*part_count += 1;
 
 		format_part_text (g_mime_multipart_get_part (multipart, i),
-				  part_count, i == 0);
+				  part_count, i == 0, params);
 	}
 
 	return;
@@ -413,7 +453,7 @@ format_part_text (GMimeObject *part, int *part_count, gboolean first)
 	fputs (format_text.header_end, stdout);
 
 	format_part_text (g_mime_message_get_mime_part (mime_message),
-			  part_count, TRUE);
+			  part_count, TRUE, params);
 
 	return;
     }
@@ -469,7 +509,11 @@ format_part_text (GMimeObject *part, int *part_count, gboolean first)
 }
 
 static void
-format_part_json (GMimeObject *part, int *part_count, gboolean first)
+format_part_json (GMimeObject *part,
+		  int *part_count,
+		  gboolean first,
+		  unused (notmuch_show_params_t *params))
+
 {
     GMimeContentType *content_type;
     GMimeContentDisposition *disposition;
@@ -498,14 +542,13 @@ format_part_json (GMimeObject *part, int *part_count, gboolean first)
 	GMimeMultipart *multipart = GMIME_MULTIPART (part);
 	int i;
 
-
 	printf (", \"content\": [\n");
 
 	for (i = 0; i < g_mime_multipart_get_count (multipart); i++) {
 		*part_count += 1;
 
 		format_part_json (g_mime_multipart_get_part (multipart, i),
-				  part_count, i == 0);
+				  part_count, i == 0, params);
 	}
 
 	printf ("]}\n");
@@ -543,7 +586,7 @@ format_part_json (GMimeObject *part, int *part_count, gboolean first)
 	printf (", \"content\": \n");
 
 	format_part_json (g_mime_message_get_mime_part (mime_message),
-			  part_count, TRUE);
+			  part_count, TRUE, params);
 
 	printf ("}\n");
 
@@ -576,7 +619,58 @@ format_part_json (GMimeObject *part, int *part_count, gboolean first)
 }
 
 static void
-show_message (void *ctx, const show_format_t *format, notmuch_message_t *message, int indent)
+format_part_part (GMimeObject *part,
+		  int *part_count,
+		  unused (gboolean first),
+		  notmuch_show_params_t *params)
+{
+    GMimeStream *stream_filter = NULL;
+    GMimeDataWrapper *wrapper;
+    GMimeStream *stream_stdout = g_mime_stream_file_new (stdout);
+
+    *part_count += 1;
+
+    if (GMIME_IS_MULTIPART (part)) {
+	GMimeMultipart *multipart = GMIME_MULTIPART (part);
+	int i;
+
+	for (i = 0; i < g_mime_multipart_get_count (multipart); i++) {
+		*part_count += 1;
+
+		format_part_part (g_mime_multipart_get_part (multipart, i),
+				  part_count, i == 0, params);
+	}
+
+	return;
+    }
+
+    if (GMIME_IS_MESSAGE_PART (part)) {
+	GMimeMessage *mime_message;
+
+	mime_message = g_mime_message_part_get_message (GMIME_MESSAGE_PART (part));
+
+	format_part_part (g_mime_message_get_mime_part (mime_message),
+			  part_count, TRUE, params);
+	return;
+    }
+
+    if (*part_count == params->part) {
+	    stream_filter = g_mime_stream_filter_new(stream_stdout);
+	    wrapper = g_mime_part_get_content_object (GMIME_PART (part));
+	    if (wrapper && stream_filter)
+		    g_mime_data_wrapper_write_to_stream (wrapper, stream_filter);
+	    if (stream_filter)
+		    g_object_unref(stream_filter);
+    }
+
+}
+
+static void
+show_message (void *ctx,
+	      const show_format_t *format,
+	      notmuch_message_t *message,
+	      int indent,
+	      notmuch_show_params_t *params)
 {
     fputs (format->message_start, stdout);
     if (format->message)
@@ -589,7 +683,8 @@ show_message (void *ctx, const show_format_t *format, notmuch_message_t *message
 
     fputs (format->body_start, stdout);
     if (format->part)
-	show_message_body (notmuch_message_get_filename (message), format->part);
+	show_message_body (notmuch_message_get_filename (message), format->part,
+			   params);
     fputs (format->body_end, stdout);
 
     fputs (format->message_end, stdout);
@@ -598,7 +693,7 @@ show_message (void *ctx, const show_format_t *format, notmuch_message_t *message
 
 static void
 show_messages (void *ctx, const show_format_t *format, notmuch_messages_t *messages, int indent,
-	       notmuch_bool_t entire_thread)
+	       notmuch_bool_t entire_thread, notmuch_show_params_t *params)
 {
     notmuch_message_t *message;
     notmuch_bool_t match;
@@ -624,14 +719,14 @@ show_messages (void *ctx, const show_format_t *format, notmuch_messages_t *messa
 	next_indent = indent;
 
 	if (match || entire_thread) {
-	    show_message (ctx, format, message, indent);
+	    show_message (ctx, format, message, indent, params);
 	    next_indent = indent + 1;
 
 	    fputs (format->message_set_sep, stdout);
 	}
 
 	show_messages (ctx, format, notmuch_message_get_replies (message),
-		       next_indent, entire_thread);
+		       next_indent, entire_thread, params);
 
 	notmuch_message_destroy (message);
 
@@ -738,8 +833,12 @@ notmuch_show_command (void *ctx, unused (int argc), unused (char *argv[]))
     char *opt;
     const show_format_t *format = &format_text;
     int entire_thread = 0;
+    int one_message = 0;
+    notmuch_show_params_t params;
     int i;
     int raw = 0;
+
+    params.part = 0;
 
     for (i = 0; i < argc && argv[i][0] == '-'; i++) {
 	if (strcmp (argv[i], "--") == 0) {
@@ -757,12 +856,17 @@ notmuch_show_command (void *ctx, unused (int argc), unused (char *argv[]))
 		format = &format_mbox;
 	    } else if (strcmp (opt, "raw") == 0) {
 		raw = 1;
+	    } else if (strcmp (opt, "part") == 0) {
+		format = &format_part;
+		one_message = 1;
 	    } else {
 		fprintf (stderr, "Invalid value for --format: %s\n", opt);
 		return 1;
 	    }
 	} else if (STRNCMP_LITERAL (argv[i], "--entire-thread") == 0) {
 	    entire_thread = 1;
+	} else if (STRNCMP_LITERAL (argv[i], "--part=") == 0) {
+	    params.part = atoi(argv[i] + sizeof ("--part=") - 1);
 	} else {
 	    fprintf (stderr, "Unrecognized option: %s\n", argv[i]);
 	    return 1;
@@ -807,79 +911,4 @@ notmuch_show_command (void *ctx, unused (int argc), unused (char *argv[]))
     notmuch_database_close (notmuch);
 
     return 0;
-}
-
-int
-notmuch_part_command (void *ctx, unused (int argc), unused (char *argv[]))
-{
-	notmuch_config_t *config;
-	notmuch_database_t *notmuch;
-	notmuch_query_t *query;
-	notmuch_messages_t *messages;
-	notmuch_message_t *message;
-	char *query_string;
-	int i;
-	int part = 0;
-
-	for (i = 0; i < argc && argv[i][0] == '-'; i++) {
-		if (strcmp (argv[i], "--") == 0) {
-			i++;
-			break;
-		}
-		if (STRNCMP_LITERAL (argv[i], "--part=") == 0) {
-			part = atoi(argv[i] + sizeof ("--part=") - 1);
-		} else {
-			fprintf (stderr, "Unrecognized option: %s\n", argv[i]);
-			return 1;
-		}
-	}
-
-	argc -= i;
-	argv += i;
-
-	config = notmuch_config_open (ctx, NULL, NULL);
-	if (config == NULL)
-		return 1;
-
-	query_string = query_string_from_args (ctx, argc, argv);
-	if (query_string == NULL) {
-		fprintf (stderr, "Out of memory\n");
-		return 1;
-	}
-
-	if (*query_string == '\0') {
-		fprintf (stderr, "Error: notmuch part requires at least one search term.\n");
-		return 1;
-	}
-
-	notmuch = notmuch_database_open (notmuch_config_get_database_path (config),
-					 NOTMUCH_DATABASE_MODE_READ_ONLY);
-	if (notmuch == NULL)
-		return 1;
-
-	query = notmuch_query_create (notmuch, query_string);
-	if (query == NULL) {
-		fprintf (stderr, "Out of memory\n");
-		return 1;
-	}
-
-	if (notmuch_query_count_messages (query) != 1) {
-		fprintf (stderr, "Error: search term did not match precisely one message.\n");
-		return 1;
-	}
-
-	messages = notmuch_query_search_messages (query);
-	message = notmuch_messages_get (messages);
-
-	if (message == NULL) {
-		fprintf (stderr, "Error: cannot find matching message.\n");
-		return 1;
-	}
-
-	show_one_part (notmuch_message_get_filename (message), part);
-
-	notmuch_query_destroy (query);
-	notmuch_database_close (notmuch);
-
-	return 0;
 }
