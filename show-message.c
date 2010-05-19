@@ -47,7 +47,6 @@ show_message_body (const char *filename,
 
     mime_message = g_mime_parser_construct_message (parser);
 
-    part_count += 1;
     show_part (g_mime_message_get_mime_part (mime_message),
 		  &part_count, TRUE);
 
@@ -85,14 +84,16 @@ show_one_part_output (GMimeObject *part)
 static void
 show_one_part_worker (GMimeObject *part, int *part_count, int desired_part)
 {
+    *part_count += 1;
+
     if (GMIME_IS_MULTIPART (part)) {
 	GMimeMultipart *multipart = GMIME_MULTIPART (part);
 	int i;
 
-	/* Account for the multipart wrapper part. */
-	*part_count += 1;
 
 	for (i = 0; i < g_mime_multipart_get_count (multipart); i++) {
+		*part_count += 1;
+
 		show_one_part_worker (g_mime_multipart_get_part (multipart, i),
 				      part_count, desired_part);
 	}
@@ -112,8 +113,6 @@ show_one_part_worker (GMimeObject *part, int *part_count, int desired_part)
 
     if (! (GMIME_IS_PART (part)))
 	return;
-
-    *part_count = *part_count + 1;
 
     if (*part_count == desired_part)
 	    show_one_part_output (part);
