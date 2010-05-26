@@ -95,7 +95,7 @@ static const show_format_t format_mbox = {
             "", NULL, "",
         "", "",
     ""
-}
+};
 
 static void
 format_message_part (const void *ctx,
@@ -787,7 +787,8 @@ static int
 do_show (void *ctx,
 	 notmuch_query_t *query,
 	 const show_format_t *format,
-	 int entire_thread)
+	 int entire_thread,
+	 notmuch_show_params_t *params)
 {
     notmuch_threads_t *threads;
     notmuch_thread_t *thread;
@@ -812,7 +813,7 @@ do_show (void *ctx,
 	    fputs (format->message_set_sep, stdout);
 	first_toplevel = 0;
 
-	show_messages (ctx, format, messages, 0, entire_thread);
+	show_messages (ctx, format, messages, 0, entire_thread, params);
 
 	notmuch_thread_destroy (thread);
 
@@ -905,7 +906,7 @@ notmuch_show_command (void *ctx, unused (int argc), unused (char *argv[]))
     if (raw)
 	return do_show_raw (ctx, query);
     else
-	return do_show (ctx, query, format, entire_thread);
+	return do_show (ctx, query, format, entire_thread, &params);
 
     notmuch_query_destroy (query);
     notmuch_database_close (notmuch);

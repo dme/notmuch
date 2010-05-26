@@ -465,10 +465,8 @@ current buffer, if possible."
     ;; message display.
     (insert "\n")
 
-    ;; Show all of the parts.
-    (mapc (lambda (inner-part)
-	    (notmuch-show-insert-bodypart msg inner-part depth))
-	  inner-parts))
+    ;; Show the content of the included message.
+    (notmuch-show-insert-bodypart msg message-part depth))
   t)
 
 (defun notmuch-show-insert-part-text/plain (msg part content-type nth depth declared-type)
