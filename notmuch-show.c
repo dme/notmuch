@@ -77,10 +77,10 @@ format_part_json (GMimeObject *part,
 static const show_format_t format_json = {
     "[",
 	"{", format_message_json,
-	    ", \"headers\": {", format_headers_json, "}\n",
-	    ", \"body\": [", format_part_json, "]\n",
-	"}\n", ", ",
-    "]\n"
+	    ", \"headers\": {", format_headers_json, "}",
+	    ", \"body\": [", format_part_json, "]",
+	"}", ", ",
+    "]"
 };
 
 static void
