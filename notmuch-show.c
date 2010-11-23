@@ -415,13 +415,13 @@ format_part_text (GMimeObject *part,
     /* Avoid compiler complaints about unused arguments. */
     (void) first;
 
+    *part_count += 1;
+
     if (GMIME_IS_MULTIPART (part)) {
 	GMimeMultipart *multipart = GMIME_MULTIPART (part);
 	int i;
 
 	for (i = 0; i < g_mime_multipart_get_count (multipart); i++) {
-		*part_count += 1;
-
 		format_part_text (g_mime_multipart_get_part (multipart, i),
 				  part_count, i == 0, params);
 	}
@@ -545,8 +545,6 @@ format_part_json (GMimeObject *part,
 	printf (", \"content\": [\n");
 
 	for (i = 0; i < g_mime_multipart_get_count (multipart); i++) {
-		*part_count += 1;
-
 		format_part_json (g_mime_multipart_get_part (multipart, i),
 				  part_count, i == 0, params);
 	}
@@ -562,7 +560,6 @@ format_part_json (GMimeObject *part,
 	const char *value;
 	InternetAddressList *addresses;
 
-	*part_count += 1;
 	mime_message = g_mime_message_part_get_message (GMIME_MESSAGE_PART (part));
 
 	/* Insert the headers of the enclosed message. */
@@ -635,8 +632,6 @@ format_part_part (GMimeObject *part,
 	int i;
 
 	for (i = 0; i < g_mime_multipart_get_count (multipart); i++) {
-		*part_count += 1;
-
 		format_part_part (g_mime_multipart_get_part (multipart, i),
 				  part_count, i == 0, params);
 	}
