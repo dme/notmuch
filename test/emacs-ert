@@ -3,6 +3,9 @@ test_description="emacs interface (ert)"
 . test-lib.sh
 
 EXPECTED=../emacs.expected-output
+export EXPECTED
+
+add_email_corpus
 
 test_begin_subtest "Emacs tests using ert"
 output=$(emacs \

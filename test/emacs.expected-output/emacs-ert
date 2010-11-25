@@ -1,9 +1,13 @@
-Running 6 tests (today)
-   passed  1/6  notmuch-fcc-multiple
-   passed  2/6  notmuch-fcc-none
-   passed  3/6  notmuch-fcc-oldstyle
-   passed  4/6  notmuch-fcc-regexp
-   passed  5/6  notmuch-fcc-simple
-   passed  6/6  notmuch-fcc-trivial
+Source file `/one/home/dme/s/notmuch/emacs/notmuch-show.el' newer than byte-compiled file
+Running 9 tests (today)
+   passed  1/9  notmuch-fcc-multiple
+   passed  2/9  notmuch-fcc-none
+   passed  3/9  notmuch-fcc-oldstyle
+   passed  4/9  notmuch-fcc-regexp
+   passed  5/9  notmuch-fcc-simple
+   passed  6/9  notmuch-fcc-trivial
+   passed  7/9  notmuch-hello
+   passed  8/9  notmuch-hello-reflect
+   passed  9/9  notmuch-show-strip-re
 
-Ran 6 tests, 6 results as expected (today)
+Ran 9 tests, 9 results as expected (today)
