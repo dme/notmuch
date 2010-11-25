@@ -1,0 +1,17 @@
+#!/bin/bash
+test_description="emacs interface (ert)"
+. test-lib.sh
+
+EXPECTED=../emacs.expected-output
+
+test_begin_subtest "Emacs tests using ert"
+output=$(emacs \
+    --batch --no-init-file --no-site-file \
+    --directory ../../emacs --directory ../ert \
+    --load notmuch-test.el \
+    --eval "(notmuch-test-batch)" \
+    2>&1 | sed -e 's/[0-9][0-9]*-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9]*/today/g')
+expected=$(cat $EXPECTED/emacs-ert)
+test_expect_equal "$output" "$expected"
+
+test_done

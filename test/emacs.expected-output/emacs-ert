@@ -1,0 +1,9 @@
+Running 6 tests (today)
+   passed  1/6  notmuch-fcc-multiple
+   passed  2/6  notmuch-fcc-none
+   passed  3/6  notmuch-fcc-oldstyle
+   passed  4/6  notmuch-fcc-regexp
+   passed  5/6  notmuch-fcc-simple
+   passed  6/6  notmuch-fcc-trivial
+
+Ran 6 tests, 6 results as expected (today)
