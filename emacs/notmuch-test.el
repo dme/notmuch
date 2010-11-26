@@ -28,15 +28,22 @@
     (insert-file-contents filename)
     (buffer-string)))
 
+(defun notmuch-test-expected-file (name)
+   (concat (getenv "EXPECTED") "/" name))
+
 ;; This tends not to work well except in batch mode.
 (defun notmuch-test-expected-result (name)
   "Get the expected result of a test as a string."
-  (notmuch-test-file-as-string
-   (concat (getenv "EXPECTED") "/" name)))
+  (notmuch-test-file-as-string (notmuch-test-expected-file name)))
 
 (defun notmuch-test-buffer-result (fn)
   (funcall fn)
   (buffer-substring-no-properties (point-min) (point-max)))
+
+(defmacro notmuch-temp-buffer-as-string (&rest body)
+  `(with-temp-buffer
+    ,@body
+    (buffer-string)))
 
 ;;
 
@@ -109,6 +116,10 @@
 
 Presumes that the email corpus is already present."
 
+  :expected-result (if (file-exists-p (notmuch-test-expected-file "notmuch-hello"))
+		       :passed
+		     :failed)
+
   (should (string= (notmuch-test-buffer-result 'notmuch-hello)
 		   (notmuch-test-expected-result "notmuch-hello"))))
 
@@ -127,7 +138,7 @@ Presumes that the email corpus is already present."
   (mapc '(lambda (test)
 	   (should (string= "fish"
 			    (notmuch-show-strip-re test))))
-	'("fish" "re: fish" "Re: fish" "RE: fish"))
+	'("fish" "re: fish" "re:  fish" "Re: fish" "RE: fish" "rE: fish"))
 
   (mapc '(lambda (test)
 	   (should (string= "some fish"
@@ -139,7 +150,40 @@ Presumes that the email corpus is already present."
 				(notmuch-show-strip-re test))))
 	'(" some fish" "re: some fish " "somere: fish" "some fish re:")))
 
-;; 
+;;
+
+(require 'notmuch-wash)
+
+(ert-deftest notmuch-wash-elide-blank-lines ()
+  (mapc '(lambda (test)
+	   (should (string= "something\n"
+			    (notmuch-temp-buffer-as-string
+			     (insert test)
+			     (notmuch-wash-elide-blank-lines 0)))))
+	'("something\n" "\nsomething\n" "\nsomething\n\n" "\n\nsomething\n\n"))
+
+  (mapc '(lambda (test)
+	   (should (string= "something\nnothing\n"
+			    (notmuch-temp-buffer-as-string
+			     (insert test)
+			     (notmuch-wash-elide-blank-lines 0)))))
+	'("something\nnothing\n" "\nsomething\nnothing\n" "\nsomething\nnothing\n\n"
+	  "\n\nsomething\nnothing\n\n"))
+
+  (mapc '(lambda (test)
+	   (should (string= "something\n\nnothing\n"
+			    (notmuch-temp-buffer-as-string
+			     (insert test)
+			     (notmuch-wash-elide-blank-lines 0)))))
+	'("something\n\nnothing\n" "\nsomething\n\nnothing\n"
+	  "\nsomething\n\nnothing\n\n" "\n\nsomething\n\nnothing\n\n"))
+
+  (should (string= "a\nb\nc\n\nd\n\ne\nf\n"
+		   (notmuch-temp-buffer-as-string
+		    (insert "\n\n\na\nb\nc\n\n\n\nd\n\ne\nf\n\n\n")
+		    (notmuch-wash-elide-blank-lines 0)))))
+
+;;
 
 (defun notmuch-test-batch ()
   "Run the notmuch ERT tests in batch mode."
