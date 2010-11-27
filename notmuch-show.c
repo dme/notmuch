@@ -508,11 +508,90 @@ format_part_text (GMimeObject *part,
     printf ("\fpart}\n");
 }
 
+static const char*
+signerstatustostring (GMimeSignerStatus x)
+{
+    switch (x) {
+    case GMIME_SIGNER_STATUS_NONE:
+	return "none";
+    case GMIME_SIGNER_STATUS_GOOD:
+	return "good";
+    case GMIME_SIGNER_STATUS_BAD:
+	return "bad";
+    case GMIME_SIGNER_STATUS_ERROR:
+	return "error";
+    }
+    return "unknown";
+}
+
+
+static void
+verify_part_json (GMimeMultipartSigned* mpsigned, GMimeCipherContext* ctx)
+{
+    GMimeSignatureValidity* validity = NULL;
+    GError* err = NULL;
+    const GMimeSigner *signer = NULL;
+    int first = 1;
+    void *ctx_quote = NULL;
+    
+    validity = g_mime_multipart_signed_verify(mpsigned, ctx, &err);
+    if (!validity)
+    {
+	fprintf (stderr, "Failed to verify signed part: %s\n", (err ? err->message : "no error explanation given"));
+	
+	if (err)
+	    g_error_free(err);
+	return;
+    }
+
+    ctx_quote = talloc_new (NULL);
+    signer = g_mime_signature_validity_get_signers(validity);
+    while (signer) {
+	if (first)
+	    first = 0;
+	else
+	    printf (",");
+
+	printf ("{");
+
+	/* status */
+	printf ("\"status\": %s\n", json_quote_str (ctx_quote, signerstatustostring(signer->status)));
+
+	if (signer->status == GMIME_SIGNER_STATUS_GOOD)
+	{
+	    if (signer->fingerprint)
+		printf (",\"fingerprint\": %s", json_quote_str (ctx_quote, signer->fingerprint));
+	    /* these dates are seconds since the epoch; should we
+	     * provide a more human-readable format string? */
+	    if (signer->created)
+		printf (",\"created\": %d", (int) signer->created);
+	    if (signer->expires)
+		printf (",\"expires\": %d", (int) signer->expires);
+	    
+	} else {
+	    if (signer->keyid)
+		printf (",\"keyid\": %s", json_quote_str (ctx_quote, signer->keyid));
+	}
+	if (signer->errors != GMIME_SIGNER_ERROR_NONE) {
+            printf (", \"errors\": %x\n", signer->errors);
+	}
+	
+	printf ("}");
+	signer = signer->next;
+    }
+    talloc_free (ctx_quote);
+    g_mime_signature_validity_free(validity);
+    /*
+      do we need to dispose of the GMimeSigner objects in some other way?
+      see https://bugzilla.gnome.org/show_bug.cgi?id=635936
+    */
+}
+
 static void
 format_part_json (GMimeObject *part,
 		  int *part_count,
 		  gboolean first,
-		  unused (notmuch_show_params_t *params))
+		  notmuch_show_params_t *params)
 
 {
     GMimeContentType *content_type;
@@ -541,6 +620,19 @@ format_part_json (GMimeObject *part,
     if (GMIME_IS_MULTIPART (part)) {
 	GMimeMultipart *multipart = GMIME_MULTIPART (part);
 	int i;
+	if (params->verifyctx && GMIME_IS_MULTIPART_SIGNED (part)) {
+	    if ( g_mime_multipart_get_count (multipart) != 2 ) {
+		/* this violates RFC 3156 section 5, so we won't bother with it. */
+		fprintf (stderr,
+			 "Error: %d part(s) for a multipart/signed message (should be exactly 2)\n",
+			 g_mime_multipart_get_count (multipart));
+	    } else {
+		GMimeMultipartSigned *signeddata = GMIME_MULTIPART_SIGNED (part);
+		printf(", \"sigstatus\": [");
+		verify_part_json(signeddata, params->verifyctx);
+		printf("]");
+	    }
+	}
 
 	printf (", \"content\": [\n");
 
@@ -819,6 +911,54 @@ do_show (void *ctx,
     return 0;
 }
 
+
+/* CRUFTY BOILERPLATE for GMimeSession (dkg thinks this will go away once GMime 2.6 comes out) */
+typedef struct _NullSession NullSession;
+typedef struct _NullSessionClass NullSessionClass;
+
+struct _NullSession {
+    GMimeSession parent_object;
+};
+struct _NullSessionClass {
+    GMimeSessionClass parent_class;
+};
+
+static void null_session_class_init (NullSessionClass *klass);
+
+static GMimeSessionClass *parent_class = NULL;
+
+static GType
+null_session_get_type (void)
+{
+    static GType type = 0;
+    
+    if (!type) {
+	static const GTypeInfo info = {
+	    sizeof (NullSessionClass),
+	    NULL, /* base_class_init */
+	    NULL, /* base_class_finalize */
+	    (GClassInitFunc) null_session_class_init,
+	    NULL, /* class_finalize */
+	    NULL, /* class_data */
+	    sizeof (NullSession),
+	    0,    /* n_preallocs */
+	    NULL, /* object_init */
+	    NULL, /* value_table */
+	};
+	type = g_type_register_static (GMIME_TYPE_SESSION, "NullSession", &info, 0);
+    }
+    return type;
+}
+
+static void
+null_session_class_init (NullSessionClass *klass)
+{
+    GMimeSessionClass *session_class = GMIME_SESSION_CLASS (klass);
+    parent_class = g_type_class_ref (GMIME_TYPE_SESSION);
+    session_class->request_passwd = NULL;
+}
+/* END CRUFTY BOILERPLATE */
+
 int
 notmuch_show_command (void *ctx, unused (int argc), unused (char *argv[]))
 {
@@ -833,8 +973,10 @@ notmuch_show_command (void *ctx, unused (int argc), unused (char *argv[]))
     notmuch_show_params_t params;
     int i;
     int raw = 0;
+    GMimeSession* session = NULL;
 
     params.part = 0;
+    params.verifyctx = NULL;
 
     for (i = 0; i < argc && argv[i][0] == '-'; i++) {
 	if (strcmp (argv[i], "--") == 0) {
@@ -859,6 +1001,16 @@ notmuch_show_command (void *ctx, unused (int argc), unused (char *argv[]))
 		fprintf (stderr, "Invalid value for --format: %s\n", opt);
 		return 1;
 	    }
+	} else if (STRNCMP_LITERAL (argv[i], "--verify") == 0 &&
+		   params.verifyctx == NULL) {
+	    session = g_object_new(null_session_get_type(), NULL);
+    
+	    if (NULL == (params.verifyctx = g_mime_gpg_context_new(session, "gpg")))
+		fprintf (stderr, "Failed to construct gpg context\n");
+	    else
+		g_mime_gpg_context_set_always_trust((GMimeGpgContext*)params.verifyctx, FALSE);
+	    g_object_unref (session);
+	    session = NULL;
 	} else if (STRNCMP_LITERAL (argv[i], "--entire-thread") == 0) {
 	    entire_thread = 1;
 	} else if (STRNCMP_LITERAL (argv[i], "--part=") == 0) {
@@ -905,6 +1057,9 @@ notmuch_show_command (void *ctx, unused (int argc), unused (char *argv[]))
 
     notmuch_query_destroy (query);
     notmuch_database_close (notmuch);
+
+    if (params.verifyctx) 
+	g_object_unref(params.verifyctx);
 
     return 0;
 }

@@ -56,6 +56,7 @@
 
 typedef struct notmuch_show_params {
     int part;
+    GMimeCipherContext* verifyctx;
 } notmuch_show_params_t;
 
 /* There's no point in continuing when we've detected that we've done
