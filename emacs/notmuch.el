@@ -50,6 +50,7 @@
 (eval-when-compile (require 'cl))
 (require 'mm-view)
 (require 'message)
+(require 'json)
 
 (require 'notmuch-lib)
 (require 'notmuch-show)
@@ -698,40 +699,81 @@ foreground and blue background."
 	  do (notmuch-search-insert-field field date count authors subject tags)))
   (insert "\n"))
 
+(defun notmuch-search-process-insert-object (object)
+  (let* ((thread-id (concat "thread:" (cdr (assoc 'thread object))))
+	 (date (format "%12s" (cdr (assoc 'date_relative object))))
+	 (count (format "[%d/%d]"
+			(cdr (assoc 'matched object))
+			(cdr (assoc 'total object))))
+	 (authors (cdr (assoc 'authors object)))
+	 (subject (cdr (assoc 'subject object)))
+	 (tag-list (cdr (assoc 'tags object)))
+	 (tags (mapconcat 'identity tag-list " "))
+	 (beg (point-marker)))
+    (notmuch-search-show-result date count authors subject tags)
+    (notmuch-search-color-line beg (point-marker) tag-list)
+    (put-text-property beg (point-marker) 'notmuch-search-thread-id thread-id)
+    (put-text-property beg (point-marker) 'notmuch-search-authors authors)
+    (put-text-property beg (point-marker) 'notmuch-search-subject subject)))
+
+(defvar notmuch-search-parse-start nil)
+(make-variable-buffer-local 'notmuch-show-parse-start)
+
+(defun notmuch-search-process-insert (proc buffer string)
+  (with-current-buffer buffer
+    (let ((inhibit-read-only t)
+	  (inhibit-redisplay t)
+	  ;; Vectors are not as useful here.
+	  (json-array-type 'list)
+	  object)
+      (save-excursion
+	;; Insert the text, advancing the process marker
+	(goto-char (point-max))
+	(insert string)
+	(set-marker (process-mark proc) (point)))
+
+      (save-excursion
+	(goto-char notmuch-search-parse-start)
+	(condition-case nil
+	    (while
+		(cond
+		 ;; Opening bracket or comma separator between
+		 ;; objects.
+		 ((or (char-equal (json-peek) ?\[)
+		      (char-equal (json-peek) ?\,))
+		  (json-advance)
+		  (delete-region notmuch-search-parse-start (point))
+		  t)
+
+		 ;; Closing array.
+		 ((char-equal (json-peek) ?\])
+		  ;; Consume both the closing bracket and any trailing
+		  ;; whitespace (typically a carriage return).
+		  (json-advance)
+		  (json-skip-whitespace)
+		  (delete-region notmuch-search-parse-start (point))
+		  nil)
+
+		 ;; Single object.
+		 ((setq object (json-read-object))
+		  ;; Delete the object that we consumed.
+		  (delete-region notmuch-search-parse-start (point))
+		  ;; Insert the corresponding results.
+		  (notmuch-search-process-insert-object object)
+		  t))
+	      ;; Consume any white space between terms.
+	      (let ((p (point)))
+		(json-skip-whitespace)
+		(delete-region p (point)))
+	      ;; Remember where we got up to.
+	      (setq notmuch-search-parse-start (point)))
+	  (error nil))))))
+
 (defun notmuch-search-process-filter (proc string)
-  "Process and filter the output of \"notmuch search\""
-  (let ((buffer (process-buffer proc))
-	(found-target nil))
+  "Process and filter the output of `notmuch search'."
+  (let ((buffer (process-buffer proc)))
     (if (buffer-live-p buffer)
-	(with-current-buffer buffer
-	  (save-excursion
-	    (let ((line 0)
-		  (more t)
-		  (inhibit-read-only t))
-	      (while more
-		(if (string-match "^\\(thread:[0-9A-Fa-f]*\\) \\([^][]*\\) \\(\\[[0-9/]*\\]\\) \\([^;]*\\); \\(.*\\) (\\([^()]*\\))$" string line)
-		    (let* ((thread-id (match-string 1 string))
-			   (date (match-string 2 string))
-			   (count (match-string 3 string))
-			   (authors (match-string 4 string))
-			   (subject (match-string 5 string))
-			   (tags (match-string 6 string))
-			   (tag-list (if tags (save-match-data (split-string tags)))))
-		      (goto-char (point-max))
-		      (let ((beg (point-marker)))
-			(notmuch-search-show-result date count authors subject tags)
-			(notmuch-search-color-line beg (point-marker) tag-list)
-			(put-text-property beg (point-marker) 'notmuch-search-thread-id thread-id)
-			(put-text-property beg (point-marker) 'notmuch-search-authors authors)
-			(put-text-property beg (point-marker) 'notmuch-search-subject subject)
-			(if (string= thread-id notmuch-search-target-thread)
-			    (progn
-			      (set 'found-target beg)
-			      (set 'notmuch-search-target-thread "found"))))
-		      (set 'line (match-end 0)))
-		  (set 'more nil)))))
-	  (if found-target
-	      (goto-char found-target)))
+	(notmuch-search-process-insert proc buffer string)
       (delete-process proc))))
 
 (defun notmuch-search-operate-all (action)
@@ -806,15 +848,15 @@ The optional parameters are used as follows:
     (set 'notmuch-search-continuation continuation)
     (let ((proc (get-buffer-process (current-buffer)))
 	  (inhibit-read-only t))
-      (if proc
-	  (error "notmuch search process already running for query `%s'" query)
-	)
+      (when proc
+	(error "notmuch search process already running for query `%s'" query))
       (erase-buffer)
-      (goto-char (point-min))
+      (setq notmuch-search-parse-start (point-min))
       (save-excursion
 	(let ((proc (start-process
 		     "notmuch-search" buffer
 		     notmuch-command "search"
+		     "--format=json"
 		     (if oldest-first
 			 "--sort=oldest-first"
 		       "--sort=newest-first")
