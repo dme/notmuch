@@ -722,10 +722,13 @@ foreground and blue background."
 (defun notmuch-search-process-insert (proc buffer string)
   (with-current-buffer buffer
     (let ((inhibit-read-only t)
+	  ;; Comment out this next line to allow useful single-step
+	  ;; during debugging.
 	  (inhibit-redisplay t)
 	  ;; Vectors are not as useful here.
 	  (json-array-type 'list)
 	  (json-object-type 'plist))
+
       (save-excursion
 	;; Insert the text, advancing the process marker
 	(goto-char (point-max))
@@ -739,46 +742,46 @@ foreground and blue background."
 
       (save-excursion
 	(goto-char notmuch-search-parse-start)
-	    (while
-		(let ((next-char (json-peek)))
-		  (cond
-		   ;; No more data (yet).
-		   ((eq next-char :json-eof)
-		    nil)
+	(while
+	    (let ((next-char (json-peek)))
+	      (cond
+	       ;; No more data (yet).
+	       ((eq next-char :json-eof)
+		nil)
 
-		   ;; Opening bracket or comma separator between
-		   ;; objects.
-		   ((or (char-equal next-char ?\[)
-			(char-equal next-char ?\,))
-		    (json-advance)
-		    (delete-region notmuch-search-parse-start (point))
-		    t)
+	       ;; Opening bracket or comma separator between
+	       ;; objects.
+	       ((or (char-equal next-char ?\[)
+		    (char-equal next-char ?\,))
+		(json-advance)
+		(delete-region notmuch-search-parse-start (point))
+		t)
 
-		   ;; Closing array.
-		   ((char-equal next-char ?\])
-		    ;; Consume both the closing bracket and any trailing
-		    ;; whitespace (typically a carriage return).
-		    (json-advance)
-		    (json-skip-whitespace)
-		    (delete-region notmuch-search-parse-start (point))
-		    nil)
-
-		   ;; Single object.
-		   ((condition-case nil
-			(let ((object (json-read-object)))
-			  ;; Delete the object that we consumed.
-			  (delete-region notmuch-search-parse-start (point))
-			  ;; Insert the corresponding results.
-			  (notmuch-search-process-insert-object object)
-			  t)
-		      (error nil)))))
-
-	      ;; Consume any white space between terms.
-	      (let ((p (point)))
+	       ;; Closing array.
+	       ((char-equal next-char ?\])
+		;; Consume both the closing bracket and any trailing
+		;; whitespace (typically a carriage return).
+		(json-advance)
 		(json-skip-whitespace)
-		(delete-region p (point)))
-	      ;; Remember where we got up to.
-	      (setq notmuch-search-parse-start (point)))))))
+		(delete-region notmuch-search-parse-start (point))
+		nil)
+
+	       ;; Single object.
+	       ((condition-case nil
+		    (let ((object (json-read-object)))
+		      ;; Delete the object that we consumed.
+		      (delete-region notmuch-search-parse-start (point))
+		      ;; Insert the corresponding results.
+		      (notmuch-search-process-insert-object object)
+		      t)
+		  (error nil)))))
+
+	  ;; Consume any white space between terms.
+	  (let ((p (point)))
+	    (json-skip-whitespace)
+	    (delete-region p (point)))
+	  ;; Remember where we got up to.
+	  (setq notmuch-search-parse-start (point)))))))
 
 (defun notmuch-search-process-filter (proc string)
   "Process and filter the output of `notmuch search'."
