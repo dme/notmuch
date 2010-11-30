@@ -700,14 +700,14 @@ foreground and blue background."
   (insert "\n"))
 
 (defun notmuch-search-process-insert-object (object)
-  (let* ((thread-id (concat "thread:" (cdr (assoc 'thread object))))
-	 (date (format "%12s" (cdr (assoc 'date_relative object))))
+  (let* ((thread-id (concat "thread:" (plist-get object :thread)))
+	 (date (format "%12s" (plist-get object :date_relative)))
 	 (count (format "[%d/%d]"
-			(cdr (assoc 'matched object))
-			(cdr (assoc 'total object))))
-	 (authors (cdr (assoc 'authors object)))
-	 (subject (cdr (assoc 'subject object)))
-	 (tag-list (cdr (assoc 'tags object)))
+			(plist-get object :matched)
+			(plist-get object :total)))
+	 (authors (plist-get object :authors))
+	 (subject (plist-get object :subject))
+	 (tag-list (plist-get object :tags))
 	 (tags (mapconcat 'identity tag-list " "))
 	 (beg (point-marker)))
     (notmuch-search-show-result date count authors subject tags)
@@ -724,7 +724,8 @@ foreground and blue background."
     (let ((inhibit-read-only t)
 	  (inhibit-redisplay t)
 	  ;; Vectors are not as useful here.
-	  (json-array-type 'list))
+	  (json-array-type 'list)
+	  (json-object-type 'plist))
       (save-excursion
 	;; Insert the text, advancing the process marker
 	(goto-char (point-max))
