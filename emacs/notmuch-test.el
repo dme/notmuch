@@ -185,6 +185,76 @@ Presumes that the email corpus is already present."
 
 ;;
 
+(require 'notmuch)
+
+(defvar notmuch-test-json-1
+  "[{\"thread\": \"XXX\",
+\"timestamp\": 946728000,
+\"date_relative\": \"2000-01-01\",
+\"matched\": 1,
+\"total\": 1,
+\"authors\": \"Notmuch Test Suite\",
+\"subject\": \"json-search-subject\",
+\"tags\": [\"inbox\", \"unread\"]}]
+")
+
+(defvar notmuch-test-json-1-result
+  "XXX:2000-01-01:Notmuch Test Suite:json-search-subject:946728000:1:1:inbox:unread\n")
+
+(defun notmuch-test-search-process-insert-object (object)
+  (insert
+   (concat
+    (mapconcat (lambda (field)
+		 (plist-get object field))
+	       '(:thread :date_relative :authors :subject)
+	       ":")
+    ":"
+    (mapconcat (lambda (field)
+		 (format "%d" (plist-get object field)))
+	       '(:timestamp :matched :total)
+	       ":")
+    ":"
+    (mapconcat 'identity
+	       (plist-get object :tags)
+	       ":")
+    "\n")))
+
+(ert-deftest notmuch-search-process-insert ()
+  ;; Fake out a few things that `notmuch-search-process-insert' uses.
+  (flet ((set-marker (proc pos))
+	 (process-mark (proc) nil)
+	 (notmuch-search-process-insert-object (object)
+					       (notmuch-test-search-process-insert-object object)))
+
+    ;; Simplest case - a single record delivered in one chunk.
+    (should
+     (string= notmuch-test-json-1-result
+	      (notmuch-temp-buffer-as-string
+	       (let ((notmuch-search-parse-start (point-min)))
+		 (notmuch-search-process-insert
+		  nil (current-buffer)
+		  notmuch-test-json-1)))))
+
+    ;; A single record delivered in two chunks.
+    (should
+     (string= notmuch-test-json-1-result
+	      (notmuch-temp-buffer-as-string
+	       (let ((notmuch-search-parse-start (point-min))
+		     (half (/ (length notmuch-test-json-1)
+			      2)))
+		 ;; Insert first half.
+		 (notmuch-search-process-insert
+		  nil (current-buffer)
+		  (substring notmuch-test-json-1 0 half))
+		 ;; Insert second half.
+		 (notmuch-search-process-insert
+		  nil (current-buffer)
+		  (substring notmuch-test-json-1 half))))))
+
+    ))
+
+;;
+
 (defun notmuch-test-batch ()
   "Run the notmuch ERT tests in batch mode."
 
