@@ -767,14 +767,13 @@ foreground and blue background."
 		nil)
 
 	       ;; Single object.
-	       ((condition-case nil
-		    (let ((object (json-read-object)))
-		      ;; Delete the object that we consumed.
-		      (delete-region notmuch-search-parse-start (point))
-		      ;; Insert the corresponding results.
-		      (notmuch-search-process-insert-object object)
-		      t)
-		  (error nil)))))
+	       ((ignore-errors
+		  (let ((object (json-read-object)))
+		    ;; Delete the object that we consumed.
+		    (delete-region notmuch-search-parse-start (point))
+		    ;; Insert the corresponding results.
+		    (notmuch-search-process-insert-object object)
+		    t)))))
 
 	  ;; Consume any white space between terms.
 	  (let ((p (point)))
