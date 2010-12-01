@@ -469,6 +469,8 @@ current buffer, if possible."
     (plist-put msg :message-invis-spec message-invis-spec)
     (overlay-put (make-overlay body-start body-end) 'invisible message-invis-spec)
 
+    (plist-put msg :depth depth)
+
     ;; Save the properties for this message. Currently this saves the
     ;; entire message (augmented it with other stuff), which seems
     ;; like overkill. We might save a reduced subset (for example, not
@@ -778,6 +780,10 @@ All currently available key bindings:
 (defun notmuch-show-get-tags ()
   "Return the tags of the current message."
   (notmuch-show-get-prop :tags))
+
+(defun notmuch-show-get-depth ()
+  "Return the depth of the current message."
+  (notmuch-show-get-prop :depth))
 
 (defun notmuch-show-message-visible-p ()
   "Is the current message visible?"
