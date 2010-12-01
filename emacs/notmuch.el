@@ -435,7 +435,8 @@ Complete list of currently available key bindings:
 				 (truncate-string-to-width subject 32 nil nil t)
 				 "*")
 			 32 nil nil t)))
-      (error "End of search results"))))
+      (ding)
+      (message "End of search results"))))
 
 (defun notmuch-search-reply-to-thread ()
   "Begin composing a reply to the entire current thread in a new buffer."
