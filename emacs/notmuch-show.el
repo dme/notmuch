@@ -323,6 +323,13 @@ message at DEPTH in the current thread."
 	;; ange-ftp, which is reasonable to use here.
 	(mm-write-region (point-min) (point-max) file nil nil nil 'no-conversion t)))))
 
+;; Nonsense required to have the new gnus `shr' HTML display code
+;; work.
+(defvar gnus-summary-buffer)
+(defvar gnus-inhibit-images)
+(if (not (fboundp 'gnus-blocked-images))
+    (defun gnus-blocked-images () nil))
+
 (defun notmuch-show-mm-display-part-inline (msg part nth content-type)
   "Use the mm-decode/mm-view functions to display a part in the
 current buffer, if possible."
@@ -334,7 +341,12 @@ current buffer, if possible."
 	    (let ((content (notmuch-show-get-bodypart-content msg part nth)))
 	      (insert content)
 	      (set-buffer display-buffer)
-	      (mm-display-part handle)
+
+	      ;; Nonsense required to have the new gnus `shr' HTML
+	      ;; display code work.
+	      (let ((gnus-inhibit-images nil))
+		(makunbound 'gnus-summary-buffer) ; Blech.
+		(mm-display-part handle))
 	      t)
 	  nil)))))
 
