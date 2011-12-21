@@ -865,7 +865,7 @@ do_show_single (void *ctx,
 
 	while (!feof (file)) {
 	    size = fread (buf, 1, sizeof (buf), file);
-	    (void) fwrite (buf, size, 1, stdout);
+	    ignore_result(fwrite (buf, size, 1, stdout));
 	}
 
 	fclose (file);

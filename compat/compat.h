@@ -30,6 +30,12 @@
 extern "C" {
 #endif
 
+#ifdef __GNUC__
+#define ignore_result(x) ({ __typeof__(x) z = x; (void) sizeof (z); })
+#else /* !__GNUC__ */
+#define ignore_result(x) x
+#endif /* __GNUC__ */
+
 #if !HAVE_GETLINE
 #include <stdio.h>
 #include <unistd.h>
