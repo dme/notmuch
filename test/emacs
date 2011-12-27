@@ -514,6 +514,25 @@ counter=$(test_emacs \
 )
 test_expect_equal "$counter" 2
 
+test_begin_subtest "notmuch-show address simplification"
+test_emacs '
+(with-temp-buffer
+  (let ((input (list
+"foo@bar.com"
+"<foo@bar.com>"
+"Foo Bar <foo@bar.com>"
+"foo@bar.com <foo@bar.com>"
+"ДБ <db-uknot@stop.me.uk>"
+"foo (at home) <foo@bar.com>"
+"foo [at home] <foo@bar.com>"
+"\"Foo Bar\" <foo@bar.com>"
+"Foo Bar"
+		)))
+    (mapc (lambda (a) (insert (notmuch-show-clean-address a) "\n")) input))
+  (test-output))
+'
+test_expect_equal_file OUTPUT $EXPECTED/notmuch-address-simplification
+
 for i in \
     show-advance-simple \
     show-advance-twice \
