@@ -88,6 +88,23 @@ any given message."
 	     notmuch-wash-elide-blank-lines
 	     notmuch-wash-excerpt-citations))
 
+(defcustom notmuch-show-line-faces nil
+  "Tag to face mapping for header line highlighting in `notmuch-show-mode'.
+
+Here is an example of how to color search results based on tags.
+ (the following text would be placed in your ~/.emacs file):
+
+ (setq notmuch-search-line-faces '((\"delete\" . (:foreground \"red\"
+						  :background \"blue\"))
+                                   (\"unread\" . (:foreground \"green\"))))
+
+The attributes defined for matching tags are merged, with later
+attributes overriding earlier. A message having both \"delete\"
+and \"unread\" tags with the above settings would have a green
+foreground and blue background."
+  :type '(alist :key-type (string) :value-type (custom-face-edit))
+  :group 'notmuch)
+
 ;; Mostly useful for debugging.
 (defcustom notmuch-show-all-multipart/alternative-parts t
   "Should all parts of multipart/alternative parts be shown?"
@@ -269,7 +286,8 @@ unchanged ADDRESS if parsing fails."
 (defun notmuch-show-insert-headerline (headers date tags depth)
   "Insert a notmuch style headerline based on HEADERS for a
 message at DEPTH in the current thread."
-  (let ((start (point)))
+  (let ((start (point))
+	overlay)
     (insert (notmuch-show-spaces-n (* notmuch-indent-messages-width depth))
 	    (notmuch-show-clean-address (plist-get headers :From))
 	    " ("
@@ -277,7 +295,9 @@ message at DEPTH in the current thread."
 	    ") ("
 	    (mapconcat 'identity tags " ")
 	    ")\n")
-    (overlay-put (make-overlay start (point)) 'face 'notmuch-message-summary-face)))
+    (setq overlay (make-overlay start (point)))
+    (overlay-put overlay 'face 'notmuch-message-summary-face)
+    (overlay-put overlay 'priority 2)))
 
 (defun notmuch-show-insert-header (header header-value)
   "Insert a single header."
@@ -716,7 +736,8 @@ current buffer, if possible."
 	 body-start body-end
 	 (headers-invis-spec (notmuch-show-make-symbol "header"))
 	 (message-invis-spec (notmuch-show-make-symbol "message"))
-	 (bare-subject (notmuch-show-strip-re (plist-get headers :Subject))))
+	 (bare-subject (notmuch-show-strip-re (plist-get headers :Subject)))
+	 (tags (plist-get msg :tags)))
 
     ;; Set `buffer-invisibility-spec' to `nil' (a list), otherwise
     ;; removing items from `buffer-invisibility-spec' (which is what
@@ -741,9 +762,12 @@ current buffer, if possible."
 					    (plist-get msg :date_relative)
 					  nil)
 					(plist-get headers :Date))
-				    (plist-get msg :tags) depth)
+				    tags depth)
 
     (setq content-start (point-marker))
+
+    ;; Colour the header line according to the tags of the message.
+    (notmuch-color-line message-start content-start tags notmuch-show-line-faces)
 
     (plist-put msg :headers-invis-spec headers-invis-spec)
     (plist-put msg :message-invis-spec message-invis-spec)

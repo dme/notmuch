@@ -648,7 +648,7 @@ This function advances the next thread when finished."
 		  (forward-line (1- notmuch-search-target-line))))))))
 
 (defcustom notmuch-search-line-faces nil
-  "Tag/face mapping for line highlighting in notmuch-search.
+  "Tag to face mapping for line highlighting in `notmuch-search-mode'.
 
 Here is an example of how to color search results based on tags.
  (the following text would be placed in your ~/.emacs file):
@@ -666,20 +666,7 @@ foreground and blue background."
 
 (defun notmuch-search-color-line (start end line-tag-list)
   "Colorize lines in `notmuch-show' based on tags."
-  ;; Create the overlay only if the message has tags which match one
-  ;; of those specified in `notmuch-search-line-faces'.
-  (let (overlay)
-    (mapc (lambda (elem)
-	    (let ((tag (car elem))
-		  (attributes (cdr elem)))
-	      (when (member tag line-tag-list)
-		(when (not overlay)
-		  (setq overlay (make-overlay start end)))
-		;; Merge the specified properties with any already
-		;; applied from an earlier match.
-		(overlay-put overlay 'face
-			     (append (overlay-get overlay 'face) attributes)))))
-	  notmuch-search-line-faces)))
+  (notmuch-color-line start end line-tag-list notmuch-search-line-faces))
 
 (defun notmuch-search-author-propertize (authors)
   "Split `authors' into matching and non-matching authors and

@@ -96,6 +96,24 @@ the user hasn't set this variable with the old or new value."
   (interactive)
   (kill-buffer (current-buffer)))
 
+(defun notmuch-color-line (start end line-tag-list spec)
+  "Colorize a line based on tags."
+  ;; Create the overlay only if the message has tags which match one
+  ;; of those specified in `spec'.
+  (let (overlay)
+    (mapc (lambda (elem)
+	    (let ((tag (car elem))
+		  (attributes (cdr elem)))
+	      (when (member tag line-tag-list)
+		(when (not overlay)
+		  (setq overlay (make-overlay start end))
+		  (overlay-put overlay 'priority 5))
+		;; Merge the specified properties with any already
+		;; applied from an earlier match.
+		(overlay-put overlay 'face
+			     (append (overlay-get overlay 'face) attributes)))))
+	  spec)))
+
 ;;
 
 (defun notmuch-common-do-stash (text)
