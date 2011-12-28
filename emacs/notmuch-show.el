@@ -1227,8 +1227,8 @@ from each message), kills the buffer, and displays the next
 thread from the search from which this thread was originally
 shown."
   (interactive)
-  (if (notmuch-show-advance)
-      (notmuch-show-archive-thread)))
+  (when (notmuch-show-advance)
+    (notmuch-show-archive-thread)))
 
 (defun notmuch-show-rewind ()
   "Move backwards through a thread, the counterpart to \\[notmuch-show-advance-and-archive]."
