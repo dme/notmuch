@@ -514,4 +514,17 @@ counter=$(test_emacs \
 )
 test_expect_equal "$counter" 2
 
+for i in \
+    show-advance-simple \
+    show-advance-twice \
+    show-advance-rewind \
+    show-advance-twice-rewind \
+    show-advance-not-eobp \
+    show-advance-eobp
+do
+    test_begin_subtest "notmuch $i"
+    result=$(test_emacs '(require (quote notmuch-test)) (notmuch-test-'$i')')
+    test_expect_equal "$result" t
+done
+
 test_done
