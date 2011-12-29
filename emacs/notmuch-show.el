@@ -1151,39 +1151,57 @@ Some useful entries are:
 ;; Commands typically bound to keys.
 
 (defun notmuch-show-advance ()
-  "Advance through thread.
+  "Advance through the current thread.
 
-If the current message in the thread is not yet fully visible,
-scroll by a near screenful to read more of the message.
+Scroll the current message if the end of it is not visible,
+otherwise move to the next message.
 
-Otherwise, (the end of the current message is already within the
-current window), advance to the next open message."
+Return `t' if we are at the end of the last message, otherwise
+`nil'."
   (interactive)
-  (let* ((end-of-this-message (notmuch-show-message-bottom))
-	 (visible-end-of-this-message (1- end-of-this-message))
-	 (ret nil))
-    (while (invisible-p visible-end-of-this-message)
-      (setq visible-end-of-this-message
-	    (max (point-min)
-		 (1- (previous-single-char-property-change
-		      visible-end-of-this-message 'invisible)))))
-    (cond
-     ;; Ideally we would test `end-of-this-message' against the result
-     ;; of `window-end', but that doesn't account for the fact that
-     ;; the end of the message might be hidden.
-     ((and visible-end-of-this-message
-	   (> visible-end-of-this-message (window-end)))
-      ;; The bottom of this message is not visible - scroll.
-      (scroll-up nil))
+  (cond
+   ((eobp)
+    ;; We are at the end of the buffer - move to the next thread.
+    t)
 
-     ((not (= end-of-this-message (point-max)))
-      ;; This is not the last message - move to the next visible one.
-      (notmuch-show-next-open-message))
+   ;; Ideally we would simply do:
+   ;;
+   ;; 	((> (notmuch-show-message-bottom) (window-end))
+   ;;
+   ;; here, but that fails if the trailing text in the buffer is
+   ;; invisible (`window-end' returns the last _visible_ character,
+   ;; which can then be smaller than `notmuch-show-message-bottom').
+   ;;
+   ;; So we need to find the last visible character of the message. We
+   ;; do this by searching backwards from `(1-
+   ;; notmuch-show-message-bottom)' for changes in the `invisible'
+   ;; property until we find a non-invisible character. When we find
+   ;; such a character we test to see whether it is visible in the
+   ;; window.
+   ;;
+   ;; Properties change between characters - the return value of
+   ;; `previous-single-char-property-change' points to the first
+   ;; character _inside_ the region with the `invisible' property
+   ;; set. To allow for this we step backwards one character upon
+   ;; finding the start of the invisible region and also at the start
+   ;; of the search.
 
-     (t
-      ;; This is the last message - change the return value
-      (setq ret t)))
-    ret))
+   ((let ((visible-bottom (1- (notmuch-show-message-bottom))))
+      (while (invisible-p visible-bottom)
+	(setq visible-bottom (max (point-min)
+				  (1- (previous-single-char-property-change
+				       visible-bottom 'invisible)))))
+      (> visible-bottom (window-end)))
+    ;; The end of this message is not visible - scroll to show more of
+    ;; it.
+    (scroll-up)
+    nil)
+
+   (t
+    ;; All of the current message has been seen - show the start of
+    ;; the next open message.
+    (notmuch-show-next-open-message)
+    nil)))
 
 (defun notmuch-show-advance-and-archive ()
   "Advance through thread and archive.
@@ -1201,40 +1219,64 @@ shown."
       (notmuch-show-archive-thread)))
 
 (defun notmuch-show-rewind ()
-  "Backup through the thread, (reverse scrolling compared to \\[notmuch-show-advance-and-archive]).
+  "Move backwards through a thread, the counterpart to \\[notmuch-show-advance-and-archive]."
 
-Specifically, if the beginning of the previous email is fewer
-than `window-height' lines from the current point, move to it
-just like `notmuch-show-previous-message'.
-
-Otherwise, just scroll down a screenful of the current message.
-
-This command does not modify any message tags, (it does not undo
-any effects from previous calls to
-`notmuch-show-advance-and-archive'."
   (interactive)
-  (let ((start-of-message (notmuch-show-message-top))
-	(start-of-window (window-start)))
+  (let ((start-of-message (notmuch-show-message-top)))
     (cond
-      ;; Either this message is properly aligned with the start of the
-      ;; window or the start of this message is not visible on the
-      ;; screen - scroll.
-     ((or (= start-of-message start-of-window)
-	  (< start-of-message start-of-window))
+     ((= start-of-message (point))
+      ;; The cursor is at the start of the current message.
+      (let ((start-of-previous (save-excursion
+				 (while (and (notmuch-show-goto-message-previous)
+					     (not (notmuch-show-message-visible-p))))
+				 (notmuch-show-message-top))))
+	;; If the start of the previous open message is visible on
+	;; screen, move the cursor there, but do not adjust or scroll
+	;; the display.
+	(if (> start-of-previous (window-start))
+	    (goto-char start-of-previous)
+
+	  ;; Otherwise, the start of the previous open message is
+	  ;; _not_ visible on screen.
+	  ;;
+	  ;; Scroll the window to show (some (more) of) the previous
+	  ;; message and move up into it.
+	  (scroll-down)
+	  (forward-line -1)
+
+	  ;; If the start of the previous message became visible on
+	  ;; screen due to the scrolling, align it with the top of the
+	  ;; window.
+	  (if (> start-of-previous (window-start))
+	      (progn
+		(goto-char start-of-previous)
+		(notmuch-show-message-adjust))
+	    ;; Otherwise leave the cursor at the start of the window.
+	    (goto-char (window-start))))))
+
+     ((< start-of-message (window-start))
+      ;; The start of the current message is not visible - scroll
+      ;; down.
       (scroll-down)
-      ;; If a small number of lines from the previous message are
-      ;; visible, realign so that the top of the current message is at
-      ;; the top of the screen.
-      (if (<= (count-screen-lines (window-start) start-of-message)
-	      next-screen-context-lines)
+      ;; If the start of the current message became visible, align it
+      ;; with the top of the window.
+      (if (> start-of-message (window-start))
 	  (progn
-	    (goto-char (notmuch-show-message-top))
-	    (notmuch-show-message-adjust)))
-      ;; Move to the top left of the window.
-      (goto-char (window-start)))
+	    (goto-char start-of-message)
+	    (notmuch-show-message-adjust))
+	;; Otherwise leave the cursor at the start of the window.
+	(goto-char (window-start))))
+
+     ((>= start-of-message (window-start))
+      ;; The start of the current message is visible in the window.
+      ;;
+      ;; Move the cursor to the start of the current message, but do
+      ;; not adjust or scroll the display.
+      (goto-char start-of-message))
+
      (t
       ;; Move to the previous message.
-      (notmuch-show-previous-message)))))
+      (notmuch-show-previous-open-message)))))
 
 (defun notmuch-show-reply (&optional prompt-for-sender)
   "Reply to the current message."
